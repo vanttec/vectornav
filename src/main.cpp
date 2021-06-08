@@ -718,7 +718,7 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
     }*/
 
     if (cd.hasVelocityEstimatedBody() & cd.hasAngularRate()) {
-        vec3f bodyVel = cd.velocityEstimatedNed();
+        vec3f bodyVel = cd.velocityEstimatedBody();
         vec3f ar = cd.angularRate();
         local_vel.z = ar[2]; //yaw rate
         local_vel.x = bodyVel[0]; //surge velocity
