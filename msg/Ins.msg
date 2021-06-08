@@ -24,8 +24,8 @@ uint64 utcTime	# The current UTC time. The year is given as a signed byte year o
 uint16 insStatus
 
 float32 yaw		# Yaw angle relative to true north. (degree)
-float32 pitch	# Yaw angle relative to true north (degree)
-float32 roll	# Pitch angle relative to horizon (degree)
+float32 pitch	# Pitch angle relative to true north (degree)
+float32 roll	# Roll angle relative to horizon (degree)
 
 float64 latitude	# INS solution position in geodetic latitude (degree)
 float64 longitude	# INS solution position in geodetic longitude (degree)

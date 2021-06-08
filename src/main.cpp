@@ -25,11 +25,14 @@
 
 #include <iostream>
 #include <cmath>
+#include <eigen3/Eigen/Dense>
 // No need to define PI twice if we already have it included...
 //#define M_PI 3.14159265358979323846  /* M_PI */
 
 // ROS Libraries
 #include "ros/ros.h"
+#include "geometry_msgs/Pose2D.h"
+#include "geometry_msgs/Vector3.h"
 #include "sensor_msgs/Imu.h"
 #include "sensor_msgs/MagneticField.h"
 #include "sensor_msgs/NavSatFix.h"
@@ -41,8 +44,10 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <vectornav/Ins.h>
 
+using namespace Eigen;
 
-ros::Publisher pubIMU, pubMag, pubGPS, pubOdom, pubTemp, pubPres, pubIns;
+
+ros::Publisher pubIMU, pubMag, pubGPS, pubOdom, pubTemp, pubPres, pubIns, ins_pos_pub, local_vel_pub, NED_pose_pub, ECEF_pose_pub, ins_ref_pub, ecef_ref_pub;
 ros::ServiceServer resetOdomSrv;
 
 //Unused covariances initilized to zero's
@@ -82,6 +87,11 @@ bool frame_based_enu;
 vec3d initial_position;
 bool initial_position_set = false;
 
+Vector3f Pe_ref;
+Matrix3f Rne;
+Vector3f Pe;
+Vector3f NED;
+
 // Basic loop so we can initilize our covariance parameters above
 boost::array<double, 9ul> setCov(XmlRpc::XmlRpcValue rpc){
     // Output covariance vector
@@ -119,6 +129,12 @@ int main(int argc, char *argv[])
     pubTemp = n.advertise<sensor_msgs::Temperature>("vectornav/Temp", 1000);
     pubPres = n.advertise<sensor_msgs::FluidPressure>("vectornav/Pres", 1000);
     pubIns = n.advertise<vectornav::Ins>("vectornav/INS", 1000);
+    ins_pos_pub = n.advertise<geometry_msgs::Pose2D>("/vectornav/ins_2d/ins_pose", 1000);
+    local_vel_pub = n.advertise<geometry_msgs::Vector3>("/vectornav/ins_2d/local_vel", 1000);
+    NED_pose_pub = n.advertise<geometry_msgs::Pose2D>("/vectornav/ins_2d/NED_pose", 1000);
+    ECEF_pose_pub = n.advertise<geometry_msgs::Vector3>("/vectornav/ins_2d/ECEF_pose", 1000);
+    ins_ref_pub = n.advertise<geometry_msgs::Pose2D>("/vectornav/ins_2d/ins_ref", 1000);
+    ecef_ref_pub = n.advertise<geometry_msgs::Vector3>("/vectornav/ins_2d/ecef_ref", 1000);
 
     resetOdomSrv = n.advertiseService("reset_odom", resetOdom);
 
@@ -290,6 +306,14 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
     vn::sensors::CompositeData cd = vn::sensors::CompositeData::parse(p);
     UserData user_data = *static_cast<UserData*>(userData);
 
+    //Custom topics
+    geometry_msgs::Pose2D ins_ref;
+    geometry_msgs::Vector3 ecef_ref;
+    geometry_msgs::Pose2D ins_pose; //inertial navigation system pose (latitude, longitude, yaw)
+	geometry_msgs::Vector3 local_vel; //veocity/speed in a local reference frame
+	geometry_msgs::Pose2D NED_pose; //pose in a local reference frame (N, E, yaw)
+	geometry_msgs::Vector3 ECEF_pose; //pose in ECEF frame (X, Y, Z)
+
     // IMU
     sensor_msgs::Imu msgIMU;
     msgIMU.header.stamp = ros::Time::now();
@@ -301,6 +325,8 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         vec4f q = cd.quaternion();
         vec3f ar = cd.angularRate();
         vec3f al = cd.acceleration();
+
+        local_vel.z = ar[2]; //yaw rate
 
         if (cd.hasAttitudeUncertainty())
         {
@@ -435,7 +461,7 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         pubGPS.publish(msgGPS);
 
         // Odometry
-        if (pubOdom.getNumSubscribers() > 0)
+        if (pubOdom.getNumSubscribers() >= 0)
         {
             nav_msgs::Odometry msgOdom;
             msgOdom.header.stamp = msgIMU.header.stamp;
@@ -449,6 +475,21 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
                 initial_position.x = pos[0];
                 initial_position.y = pos[1];
                 initial_position.z = pos[2];
+                vec3d lla = cd.positionEstimatedLla();
+                float refx = (M_PI / 180)*(lla[0]);
+                float refy = (M_PI / 180)*(lla[1]);
+                Pe_ref << pos[0],
+            			  pos[1],
+			              pos[2];
+                Rne << -sin(refx) * cos(refy), -sin(refx) * sin(refy), cos(refx),
+                       -sin(refy), cos(refy), 0,
+                       -cos(refx) * cos(refy), -cos(refx) * sin(refy), -sin(refx);
+                ins_ref.x = lla[0];
+                ins_ref.y = lla[1];
+                geometry_msgs::Vector3 ecef_ref;
+                ecef_ref.x = pos[0];
+                ecef_ref.y = pos[1];
+                ecef_ref.z = pos[2];
             }
 
             msgOdom.pose.pose.position.x = pos[0] - initial_position[0];
@@ -579,6 +620,7 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         msgINS.yaw = rpy[0];
         msgINS.pitch = rpy[1];
         msgINS.roll = rpy[2];
+        ins_pose.theta = (M_PI / 180)*(rpy[0]);
     }
 
     if (cd.hasPositionEstimatedLla()) {
@@ -586,6 +628,22 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         msgINS.latitude = lla[0];
         msgINS.longitude = lla[1];
         msgINS.altitude = lla[2];
+        ins_pose.x = lla[0];
+        ins_pose.y = lla[1];
+    }
+
+    if (cd.hasPositionEstimatedEcef()) {
+        vec3d pos = cd.positionEstimatedEcef();
+        Pe << pos[0],
+			  pos[1],
+              pos[2];
+        ECEF_pose.x = Pe(0);
+        ECEF_pose.y = Pe(1);
+        ECEF_pose.z = Pe(2);
+        NED = Rne * (Pe - Pe_ref);
+        NED_pose.x = NED(0);
+        NED_pose.y = NED(1);
+        NED_pose.theta = ins_pose.theta;
     }
 
     if (cd.hasVelocityEstimatedNed()) {
@@ -593,6 +651,12 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         msgINS.nedVelX = nedVel[0];
         msgINS.nedVelY = nedVel[1];
         msgINS.nedVelZ = nedVel[2];
+    }
+
+    if (cd.hasVelocityEstimatedBody()) {
+        vec3f bodyVel = cd.velocityEstimatedNed();
+        local_vel.x = bodyVel[0]; //surge velocity
+	    local_vel.y = bodyVel[1]; //sway velocity
     }
 
     if (cd.hasAttitudeUncertainty())
@@ -613,6 +677,12 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
 
     if (msgINS.insStatus && msgINS.utcTime) {
         pubIns.publish(msgINS);
+        ins_pos_pub.publish(ins_pose);
+        local_vel_pub.publish(local_vel);
+        NED_pose_pub.publish(NED_pose);
+        ECEF_pose_pub.publish(ECEF_pose);
+        ins_ref_pub.publish(ins_ref);
+        ecef_ref_pub.publish(ecef_ref);
     }
 
 }
