@@ -614,24 +614,24 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         std::memcpy(&msgINS.utcTime, utcTimeBytes, 8);
     }*/
 
-    if (cd.hasYawPitchRoll()) {
-        vec3f rpy = cd.yawPitchRoll();
+    //if (cd.hasYawPitchRoll()) {
+        //vec3f rpy = cd.yawPitchRoll();
         /*msgINS.yaw = rpy[0];
         msgINS.pitch = rpy[1];
         msgINS.roll = rpy[2];*/
-        ins_pose.theta = (M_PI / 180)*(rpy[0]);
-    }
+       // ins_pose.theta = (M_PI / 180)*(rpy[0]);
+   // }
 
-    if (cd.hasPositionEstimatedLla()) {
-        vec3d lla = cd.positionEstimatedLla();
+    //if (cd.hasPositionEstimatedLla()) {
+       // vec3d lla = cd.positionEstimatedLla();
         /*msgINS.latitude = lla[0];
         msgINS.longitude = lla[1];
         msgINS.altitude = lla[2];*/
-        ins_pose.x = lla[0];
-        ins_pose.y = lla[1];
-    }
+       // ins_pose.x = lla[0];
+       // ins_pose.y = lla[1];
+    //}
 
-    if (cd.hasPositionEstimatedEcef()) {
+    /*if (cd.hasPositionEstimatedEcef()) {
         vec3d pos = cd.positionEstimatedEcef();
             if (!initial_position_set)
             {
@@ -664,7 +664,51 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         NED_pose.x = NED(0);
         NED_pose.y = NED(1);
         NED_pose.theta = ins_pose.theta;
-    }
+    }*/
+
+    if (cd.hasPositionEstimatedEcef() & cd.hasYawPitchRoll() & cd.hasPositionEstimatedEcef()) {
+        vec3d pos = cd.positionEstimatedEcef();
+        vec3f rpy = cd.yawPitchRoll();
+        vec3d lla = cd.positionEstimatedLla();
+            if (!initial_position_set)
+            {
+                initial_position_set = true;
+                initial_position.x = pos[0];
+                initial_position.y = pos[1];
+                initial_position.z = pos[2];
+                float refx = (M_PI / 180)*(lla[0]);
+                float refy = (M_PI / 180)*(lla[1]);
+                Pe_ref << pos[0],
+            			  pos[1],
+			              pos[2];
+                Rne << -sin(refx) * cos(refy), -sin(refx) * sin(refy), cos(refx),
+                       -sin(refy), cos(refy), 0,
+                       -cos(refx) * cos(refy), -cos(refx) * sin(refy), -sin(refx);
+                ins_ref.x = lla[0];
+                ins_ref.y = lla[1];
+                ecef_ref.x = pos[0];
+                ecef_ref.y = pos[1];
+                ecef_ref.z = pos[2];
+            }
+        Pe << pos[0],
+			  pos[1],
+              pos[2];
+        ECEF_pose.x = Pe(0);
+        ECEF_pose.y = Pe(1);
+        ECEF_pose.z = Pe(2);
+        NED = Rne * (Pe - Pe_ref);
+        NED_pose.x = NED(0);
+        NED_pose.y = NED(1);
+        ins_pose.x = lla[0];
+        ins_pose.y = lla[1];
+        ins_pose.theta = (M_PI / 180)*(rpy[0]);
+        NED_pose.theta = ins_pose.theta;
+        ins_pos_pub.publish(ins_pose);
+        NED_pose_pub.publish(NED_pose);
+        ECEF_pose_pub.publish(ECEF_pose);
+        ins_ref_pub.publish(ins_ref);
+        ecef_ref_pub.publish(ecef_ref);
+        }
 
     /*if (cd.hasVelocityEstimatedNed()) {
         vec3f nedVel = cd.velocityEstimatedNed();
@@ -673,16 +717,19 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         msgINS.nedVelZ = nedVel[2];
     }*/
 
-    if (cd.hasVelocityEstimatedBody()) {
+    if (cd.hasVelocityEstimatedBody() & cd.hasAngularRate()) {
         vec3f bodyVel = cd.velocityEstimatedNed();
-        local_vel.x = bodyVel[0]; //surge velocity
-	    local_vel.y = bodyVel[1]; //sway velocity
-    }
-
-    if (cd.hasAngularRate()) {
         vec3f ar = cd.angularRate();
         local_vel.z = ar[2]; //yaw rate
+        local_vel.x = bodyVel[0]; //surge velocity
+	    local_vel.y = bodyVel[1]; //sway velocity
+        local_vel_pub.publish(local_vel);
     }
+
+    /*if (cd.hasAngularRate()) {
+        vec3f ar = cd.angularRate();
+        local_vel.z = ar[2]; //yaw rate
+    }*/
 
     /*if (cd.hasAttitudeUncertainty())
     {
@@ -702,12 +749,12 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
 
     //if (msgINS.insStatus && msgINS.utcTime) {
         //pubIns.publish(msgINS);
-    ins_pos_pub.publish(ins_pose);
+    /*ins_pos_pub.publish(ins_pose);
     local_vel_pub.publish(local_vel);
     NED_pose_pub.publish(NED_pose);
     ECEF_pose_pub.publish(ECEF_pose);
     ins_ref_pub.publish(ins_ref);
-    ecef_ref_pub.publish(ecef_ref);
+    ecef_ref_pub.publish(ecef_ref);*/
     //}
 
 }
