@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
     pn.param<std::string>("frame_id", frame_id, "vectornav");
     pn.param<bool>("tf_ned_to_enu", tf_ned_to_enu, false);
     pn.param<bool>("frame_based_enu", frame_based_enu, false);
-    pn.param<int>("async_output_rate", async_output_rate, 40);
+    pn.param<int>("async_output_rate", async_output_rate, 100);
     pn.param<std::string>("serial_port", SensorPort, "/dev/ttyUSB0");
     pn.param<int>("serial_baud", SensorBaudrate, 115200);
     pn.param<int>("fixed_imu_rate", SensorImuRate, 800);
