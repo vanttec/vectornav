@@ -151,9 +151,9 @@ int main(int argc, char *argv[])
     pn.param<std::string>("frame_id", frame_id, "vectornav");
     pn.param<bool>("tf_ned_to_enu", tf_ned_to_enu, false);
     pn.param<bool>("frame_based_enu", frame_based_enu, false);
-    pn.param<int>("async_output_rate", async_output_rate, 100);
+    pn.param<int>("async_output_rate", async_output_rate, 200);
     pn.param<std::string>("serial_port", SensorPort, "/dev/ttyUSB0");
-    pn.param<int>("serial_baud", SensorBaudrate, 115200);
+    pn.param<int>("serial_baud", SensorBaudrate, 921600);
     pn.param<int>("fixed_imu_rate", SensorImuRate, 800);
 
     //Call to set covariances
@@ -315,7 +315,7 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
 	geometry_msgs::Vector3 ECEF_pose; //pose in ECEF frame (X, Y, Z)
 
     // IMU
-    sensor_msgs::Imu msgIMU;
+    /*sensor_msgs::Imu msgIMU;
     msgIMU.header.stamp = ros::Time::now();
     msgIMU.header.frame_id = frame_id;
 
@@ -407,10 +407,10 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         msgIMU.angular_velocity_covariance = angular_vel_covariance;
         msgIMU.linear_acceleration_covariance = linear_accel_covariance;
         pubIMU.publish(msgIMU);
-    }
+    }*/
 
     // Magnetic Field
-    if (cd.hasMagnetic())
+    /*if (cd.hasMagnetic())
     {
         vec3f mag = cd.magnetic();
         sensor_msgs::MagneticField msgMag;
@@ -420,10 +420,10 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         msgMag.magnetic_field.y = mag[1];
         msgMag.magnetic_field.z = mag[2];
         pubMag.publish(msgMag);
-    }
+    }*/
 
     // GPS
-    if (user_data.device_family != VnSensor::Family::VnSensor_Family_Vn100)
+    /*if (user_data.device_family != VnSensor::Family::VnSensor_Family_Vn100)
     {
         vec3d lla = cd.positionEstimatedLla();
 
@@ -461,7 +461,7 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         pubGPS.publish(msgGPS);
 
         // Odometry
-        if (pubOdom.getNumSubscribers() >= 0)
+        if (pubOdom.getNumSubscribers() > 0)
         {
             nav_msgs::Odometry msgOdom;
             msgOdom.header.stamp = msgIMU.header.stamp;
@@ -486,7 +486,6 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
                        -cos(refx) * cos(refy), -cos(refx) * sin(refy), -sin(refx);
                 ins_ref.x = lla[0];
                 ins_ref.y = lla[1];
-                geometry_msgs::Vector3 ecef_ref;
                 ecef_ref.x = pos[0];
                 ecef_ref.y = pos[1];
                 ecef_ref.z = pos[2];
@@ -563,10 +562,10 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
             }
             pubOdom.publish(msgOdom);
         }
-    }
+    }*/
 
     // Temperature
-    if (cd.hasTemperature())
+    /*if (cd.hasTemperature())
     {
         float temp = cd.temperature();
 
@@ -575,10 +574,10 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         msgTemp.header.frame_id = msgIMU.header.frame_id;
         msgTemp.temperature = temp;
         pubTemp.publish(msgTemp);
-    }
+    }*/
 
     // Barometer
-    if (cd.hasPressure())
+    /*if (cd.hasPressure())
     {
         float pres = cd.pressure();
 
@@ -587,10 +586,10 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         msgPres.header.frame_id = msgIMU.header.frame_id;
         msgPres.fluid_pressure = pres;
         pubPres.publish(msgPres);
-    }
+    }*/
 
     // INS
-    vectornav::Ins msgINS;
+    /*vectornav::Ins msgINS;
     msgINS.header.stamp = ros::Time::now();
     msgINS.header.frame_id = frame_id;
 
@@ -606,34 +605,55 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
 
     if (cd.hasWeek()){
         msgINS.week = cd.week();
-    }
+    }*/
 
-    if (cd.hasTimeUtc()){
+    /*if (cd.hasTimeUtc()){
         TimeUtc utcTime = cd.timeUtc();
         char* utcTimeBytes = reinterpret_cast<char*>(&utcTime);
         //msgINS.utcTime bytes are in Little Endian Byte Order
         std::memcpy(&msgINS.utcTime, utcTimeBytes, 8);
-    }
+    }*/
 
     if (cd.hasYawPitchRoll()) {
         vec3f rpy = cd.yawPitchRoll();
-        msgINS.yaw = rpy[0];
+        /*msgINS.yaw = rpy[0];
         msgINS.pitch = rpy[1];
-        msgINS.roll = rpy[2];
+        msgINS.roll = rpy[2];*/
         ins_pose.theta = (M_PI / 180)*(rpy[0]);
     }
 
     if (cd.hasPositionEstimatedLla()) {
         vec3d lla = cd.positionEstimatedLla();
-        msgINS.latitude = lla[0];
+        /*msgINS.latitude = lla[0];
         msgINS.longitude = lla[1];
-        msgINS.altitude = lla[2];
+        msgINS.altitude = lla[2];*/
         ins_pose.x = lla[0];
         ins_pose.y = lla[1];
     }
 
     if (cd.hasPositionEstimatedEcef()) {
         vec3d pos = cd.positionEstimatedEcef();
+            if (!initial_position_set)
+            {
+                initial_position_set = true;
+                initial_position.x = pos[0];
+                initial_position.y = pos[1];
+                initial_position.z = pos[2];
+                vec3d lla = cd.positionEstimatedLla();
+                float refx = (M_PI / 180)*(lla[0]);
+                float refy = (M_PI / 180)*(lla[1]);
+                Pe_ref << pos[0],
+            			  pos[1],
+			              pos[2];
+                Rne << -sin(refx) * cos(refy), -sin(refx) * sin(refy), cos(refx),
+                       -sin(refy), cos(refy), 0,
+                       -cos(refx) * cos(refy), -cos(refx) * sin(refy), -sin(refx);
+                ins_ref.x = lla[0];
+                ins_ref.y = lla[1];
+                ecef_ref.x = pos[0];
+                ecef_ref.y = pos[1];
+                ecef_ref.z = pos[2];
+            }
         Pe << pos[0],
 			  pos[1],
               pos[2];
@@ -646,12 +666,12 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         NED_pose.theta = ins_pose.theta;
     }
 
-    if (cd.hasVelocityEstimatedNed()) {
+    /*if (cd.hasVelocityEstimatedNed()) {
         vec3f nedVel = cd.velocityEstimatedNed();
         msgINS.nedVelX = nedVel[0];
         msgINS.nedVelY = nedVel[1];
         msgINS.nedVelZ = nedVel[2];
-    }
+    }*/
 
     if (cd.hasVelocityEstimatedBody()) {
         vec3f bodyVel = cd.velocityEstimatedNed();
@@ -659,30 +679,35 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
 	    local_vel.y = bodyVel[1]; //sway velocity
     }
 
-    if (cd.hasAttitudeUncertainty())
+    if (cd.hasAngularRate()) {
+        vec3f ar = cd.angularRate();
+        local_vel.z = ar[2]; //yaw rate
+    }
+
+    /*if (cd.hasAttitudeUncertainty())
     {
         vec3f attUncertainty = cd.attitudeUncertainty();
         msgINS.attUncertainty[0] = attUncertainty[0];
         msgINS.attUncertainty[1] = attUncertainty[1];
         msgINS.attUncertainty[2] = attUncertainty[2];
-    }
+    }*/
 
-    if (cd.hasPositionUncertaintyEstimated()){
+    /*if (cd.hasPositionUncertaintyEstimated()){
         msgINS.posUncertainty = cd.positionUncertaintyEstimated();
-    }
+    }*/
 
-    if (cd.hasVelocityUncertaintyEstimated()){
+    /*if (cd.hasVelocityUncertaintyEstimated()){
         msgINS.velUncertainty = cd.velocityUncertaintyEstimated();
-    }
+    }*/
 
-    if (msgINS.insStatus && msgINS.utcTime) {
-        pubIns.publish(msgINS);
-        ins_pos_pub.publish(ins_pose);
-        local_vel_pub.publish(local_vel);
-        NED_pose_pub.publish(NED_pose);
-        ECEF_pose_pub.publish(ECEF_pose);
-        ins_ref_pub.publish(ins_ref);
-        ecef_ref_pub.publish(ecef_ref);
-    }
+    //if (msgINS.insStatus && msgINS.utcTime) {
+        //pubIns.publish(msgINS);
+    ins_pos_pub.publish(ins_pose);
+    local_vel_pub.publish(local_vel);
+    NED_pose_pub.publish(NED_pose);
+    ECEF_pose_pub.publish(ECEF_pose);
+    ins_ref_pub.publish(ins_ref);
+    ecef_ref_pub.publish(ecef_ref);
+    //}
 
 }
