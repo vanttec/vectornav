@@ -84,13 +84,21 @@ bool tf_ned_to_enu;
 bool frame_based_enu;
 
 // Initial position after getting a GPS fix.
-vec3d initial_position;
+//vec3d initial_position;
 bool initial_position_set = false;
 
 Vector3f Pe_ref;
 Matrix3f Rne;
 Vector3f Pe;
 Vector3f NED;
+float re = 6378137; //equatorial radius
+float rp = 6356752; //polar axis radius
+float ecc = 0.0818; //eccentricity
+//Alternatively use
+//float ecc = pow(re*re - rp*rp,0.5)/re;
+float Ne; //prime vertical radius of curvature
+float lat_radians; //latitude in radians
+float lon_radians; //longitude in radians
 
 // Basic loop so we can initilize our covariance parameters above
 boost::array<double, 9ul> setCov(XmlRpc::XmlRpcValue rpc){
@@ -666,33 +674,38 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
         NED_pose.theta = ins_pose.theta;
     }*/
 
-    if (cd.hasPositionEstimatedEcef() & cd.hasYawPitchRoll() & cd.hasPositionEstimatedEcef()) {
-        vec3d pos = cd.positionEstimatedEcef();
+    //if (cd.hasPositionEstimatedLla() & cd.hasYawPitchRoll() & cd.hasPositionEstimatedEcef()) {
+    if (cd.hasPositionEstimatedLla() & cd.hasYawPitchRoll()) {
+        //vec3d pos = cd.positionEstimatedEcef();
         vec3f rpy = cd.yawPitchRoll();
         vec3d lla = cd.positionEstimatedLla();
             if (!initial_position_set)
             {
                 initial_position_set = true;
-                initial_position.x = pos[0];
+                /*initial_position.x = pos[0];
                 initial_position.y = pos[1];
-                initial_position.z = pos[2];
-                float refx = (M_PI / 180)*(lla[0]);
-                float refy = (M_PI / 180)*(lla[1]);
-                Pe_ref << pos[0],
-            			  pos[1],
-			              pos[2];
+                initial_position.z = pos[2];*/
+                float refx = (M_PI / 180)*(lla[0]); //starting latitude in radians
+                float refy = (M_PI / 180)*(lla[1]); //starting longitude in radians
+                Ne = (re) / (pow(1 - (ecc*ecc * sin(refx)*sin(refx)),0.5));
+                Pe_ref << Ne * cos(refx)*cos(refy),
+            			  Ne * cos(refx)*sin(refy),
+			              (Ne*(1 - ecc*ecc)) * sin(refx);
                 Rne << -sin(refx) * cos(refy), -sin(refx) * sin(refy), cos(refx),
                        -sin(refy), cos(refy), 0,
                        -cos(refx) * cos(refy), -cos(refx) * sin(refy), -sin(refx);
                 ins_ref.x = lla[0];
                 ins_ref.y = lla[1];
-                ecef_ref.x = pos[0];
-                ecef_ref.y = pos[1];
-                ecef_ref.z = pos[2];
+                ecef_ref.x = Pe_ref(0);
+                ecef_ref.y = Pe_ref(1);
+                ecef_ref.z = Pe_ref(2);
             }
-        Pe << pos[0],
-			  pos[1],
-              pos[2];
+        lat_radians = (M_PI / 180)*(lla[0]);
+        lon_radians = (M_PI / 180)*(lla[1]);
+        Ne = (re) / (pow(1 - (ecc*ecc * sin(lat_radians)*sin(lat_radians)),0.5));
+        Pe << Ne * cos(lat_radians)*cos(lon_radians),
+			  Ne * cos(lat_radians)*sin(lon_radians),
+              (Ne*(1 - ecc*ecc)) * sin(lat_radians);
         ECEF_pose.x = Pe(0);
         ECEF_pose.y = Pe(1);
         ECEF_pose.z = Pe(2);
