@@ -87,18 +87,26 @@ bool frame_based_enu;
 //vec3d initial_position;
 bool initial_position_set = false;
 
-Vector3f Pe_ref;
-Matrix3f Rne;
-Vector3f Pe;
-Vector3f NED;
-float re = 6378137; //equatorial radius
-float rp = 6356752; //polar axis radius
-float ecc = 0.0818; //eccentricity
+Vector3d Pe_ref;
+Matrix3d Rne;
+Vector3d Pe;
+Vector3d NED;
+double re = 6378137; //equatorial radius
+double rp = 6356752; //polar axis radius
+double ecc = 0.0818; //eccentricity
 //Alternatively use
 //float ecc = pow(re*re - rp*rp,0.5)/re;
-float Ne; //prime vertical radius of curvature
-float lat_radians; //latitude in radians
-float lon_radians; //longitude in radians
+double Ne; //prime vertical radius of curvature
+double lat_radians; //latitude in radians
+double lon_radians; //longitude in radians
+
+//Custom topics
+geometry_msgs::Pose2D ins_ref;
+geometry_msgs::Vector3 ecef_ref;
+geometry_msgs::Pose2D ins_pose; //inertial navigation system pose (latitude, longitude, yaw)
+geometry_msgs::Vector3 local_vel; //veocity/speed in a local reference frame
+geometry_msgs::Pose2D NED_pose; //pose in a local reference frame (N, E, yaw)
+geometry_msgs::Vector3 ECEF_pose; //pose in ECEF frame (X, Y, Z)
 
 // Basic loop so we can initilize our covariance parameters above
 boost::array<double, 9ul> setCov(XmlRpc::XmlRpcValue rpc){
@@ -313,14 +321,6 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
 {
     vn::sensors::CompositeData cd = vn::sensors::CompositeData::parse(p);
     UserData user_data = *static_cast<UserData*>(userData);
-
-    //Custom topics
-    geometry_msgs::Pose2D ins_ref;
-    geometry_msgs::Vector3 ecef_ref;
-    geometry_msgs::Pose2D ins_pose; //inertial navigation system pose (latitude, longitude, yaw)
-	geometry_msgs::Vector3 local_vel; //veocity/speed in a local reference frame
-	geometry_msgs::Pose2D NED_pose; //pose in a local reference frame (N, E, yaw)
-	geometry_msgs::Vector3 ECEF_pose; //pose in ECEF frame (X, Y, Z)
 
     // IMU
     /*sensor_msgs::Imu msgIMU;
@@ -675,18 +675,16 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
     }*/
 
     //if (cd.hasPositionEstimatedLla() & cd.hasYawPitchRoll() & cd.hasPositionEstimatedEcef()) {
-    if (cd.hasPositionEstimatedLla() & cd.hasYawPitchRoll()) {
+    if (cd.hasPositionEstimatedLla() == true && cd.hasYawPitchRoll() == true) {
         //vec3d pos = cd.positionEstimatedEcef();
         vec3f rpy = cd.yawPitchRoll();
         vec3d lla = cd.positionEstimatedLla();
-            if (!initial_position_set)
+            if (initial_position_set == false && lla[0] != 0.0)
             {
                 initial_position_set = true;
-                /*initial_position.x = pos[0];
-                initial_position.y = pos[1];
-                initial_position.z = pos[2];*/
-                float refx = (M_PI / 180)*(lla[0]); //starting latitude in radians
-                float refy = (M_PI / 180)*(lla[1]); //starting longitude in radians
+                ROS_WARN("in");
+                double refx = (M_PI / 180)*(lla[0]); //starting latitude in radians
+                double refy = (M_PI / 180)*(lla[1]); //starting longitude in radians
                 Ne = (re) / (pow(1 - (ecc*ecc * sin(refx)*sin(refx)),0.5));
                 Pe_ref << Ne * cos(refx)*cos(refy),
             			  Ne * cos(refx)*sin(refy),
