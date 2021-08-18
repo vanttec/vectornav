@@ -694,6 +694,7 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
                        -cos(refx) * cos(refy), -cos(refx) * sin(refy), -sin(refx);
                 ins_ref.x = lla[0];
                 ins_ref.y = lla[1];
+                ins_ref.theta = (M_PI / 180)*(rpy[0]);
                 ecef_ref.x = Pe_ref(0);
                 ecef_ref.y = Pe_ref(1);
                 ecef_ref.z = Pe_ref(2);
